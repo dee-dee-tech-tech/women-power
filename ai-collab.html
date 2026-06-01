@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Я + Машина</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #2a2a3a;
+    --accent: #c8a96e;
+    --accent2: #7b6ee8;
+    --text: #e8e4dc;
+    --muted: #6a6880;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 2rem 2.5rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+  }
+
+  .logo {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2.2rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+
+  .logo span {
+    color: var(--accent2);
+    font-style: italic;
+  }
+
+  .tagline {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    height: calc(100vh - 80px);
+  }
+
+  .panel {
+    padding: 2rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .panel-left {
+    border-right: 1px solid var(--border);
+  }
+
+  .panel-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .panel-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    background: #0e0e16;
+    cursor: crosshair;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+
+  .result-area {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0e0e16;
+    position: relative;
+  }
+
+  .result-placeholder {
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .result-placeholder .icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.3;
+  }
+
+  .result-placeholder p {
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    line-height: 2;
+  }
+
+  .result-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+    animation: fadeIn 0.8s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(1.02); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .controls {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .brush-sizes {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .brush-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s;
+  }
+
+  .brush-btn.active { border-color: var(--accent); }
+
+  .brush-btn .dot {
+    background: var(--text);
+    border-radius: 50%;
+  }
+
+  .color-row {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: white; }
+
+  .btn-clear {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.4rem 0.9rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    text-transform: uppercase;
+  }
+
+  .btn-clear:hover { border-color: var(--text); color: var(--text); }
+
+  .generate-row {
+    display: flex;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .prompt-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.7rem 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .prompt-input:focus { border-color: var(--accent2); }
+  .prompt-input::placeholder { color: var(--muted); }
+
+  .btn-generate {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 0.7rem 1.8rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+
+  .btn-generate:hover { background: #d4b97e; }
+  .btn-generate:active { transform: scale(0.98); }
+  .btn-generate:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  .loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.9);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .loading-overlay.active { display: flex; }
+
+  .loader {
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+  .download-btn {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(10,10,15,0.8);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 0.5rem 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: none;
+    transition: background 0.2s;
+    text-decoration: none;
+  }
+
+  .download-btn:hover { background: rgba(200, 169, 110, 0.15); }
+  .download-btn.visible { display: block; }
+
+  .api-notice {
+    background: rgba(123, 110, 232, 0.1);
+    border: 1px solid rgba(123, 110, 232, 0.3);
+    padding: 0.8rem 1rem;
+    font-size: 0.6rem;
+    line-height: 1.8;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .api-notice strong { color: var(--accent2); }
+
+  .key-row {
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .key-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.6rem 0.8rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .key-input:focus { border-color: var(--accent2); }
+  .key-input::placeholder { color: var(--muted); }
+
+  .btn-save-key {
+    background: transparent;
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    padding: 0.6rem 1rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-save-key:hover { background: rgba(123, 110, 232, 0.15); }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: inline-block;
+    margin-right: 0.4rem;
+  }
+
+  .status-dot.ready { background: #6ec894; }
+
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; height: auto; }
+    .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+    .panel { height: 60vh; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Я <span>+</span> Машина</div>
+  <div class="tagline">AI Collaboration · UN Women Event</div>
+</header>
+
+<div class="main">
+  <!-- LEFT: Drawing -->
+  <div class="panel panel-left">
+    <div class="panel-label">твой рисунок</div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="drawCanvas"></canvas>
+    </div>
+
+    <div class="controls">
+      <div class="brush-sizes">
+        <button class="brush-btn active" data-size="3" onclick="setBrush(3, this)">
+          <div class="dot" style="width:4px;height:4px"></div>
+        </button>
+        <button class="brush-btn" data-size="8" onclick="setBrush(8, this)">
+          <div class="dot" style="width:8px;height:8px"></div>
+        </button>
+        <button class="brush-btn" data-size="18" onclick="setBrush(18, this)">
+          <div class="dot" style="width:14px;height:14px"></div>
+        </button>
+      </div>
+
+      <div class="color-row">
+        <div class="color-swatch active" style="background:#e8e4dc" onclick="setColor('#e8e4dc', this)"></div>
+        <div class="color-swatch" style="background:#c8a96e" onclick="setColor('#c8a96e', this)"></div>
+        <div class="color-swatch" style="background:#7b6ee8" onclick="setColor('#7b6ee8', this)"></div>
+        <div class="color-swatch" style="background:#e87b7b" onclick="setColor('#e87b7b', this)"></div>
+        <div class="color-swatch" style="background:#6ec894" onclick="setColor('#6ec894', this)"></div>
+      </div>
+
+      <button class="btn-clear" onclick="clearCanvas()">Очистить</button>
+    </div>
+
+    <div class="generate-row">
+      <input
+        class="prompt-input"
+        id="promptInput"
+        placeholder="опиши стиль... (напр: cosmic warrior, watercolor, neon)"
+        value="empowered woman, futuristic digital art, vibrant colors, detailed"
+      />
+      <button class="btn-generate" id="generateBtn" onclick="generate()">
+        Создать →
+      </button>
+    </div>
+  </div>
+
+  <!-- RIGHT: Result -->
+  <div class="panel">
+    <div class="panel-label">
+      <span class="status-dot" id="statusDot"></span>
+      интерпретация AI
+    </div>
+
+    <div class="result-area" id="resultArea">
+      <div class="result-placeholder" id="resultPlaceholder">
+        <div class="icon">◈</div>
+        <p>нарисуй что-нибудь слева<br>и нажми «создать»</p>
+      </div>
+      <img class="result-img" id="resultImg" alt="AI generation" />
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+        <div class="loading-text">AI интерпретирует...</div>
+      </div>
+      <a class="download-btn" id="downloadBtn" download="я-и-машина.png">↓ Скачать</a>
+    </div>
+
+    <div class="api-notice">
+      <strong>Для работы нужен ключ Replicate API</strong><br>
+      Получи бесплатно на replicate.com → вставь ниже
+    </div>
+
+    <div class="key-row">
+      <input
+        class="key-input"
+        id="apiKeyInput"
+        type="password"
+        placeholder="r8_xxxxxxxxxxxxxxxx"
+      />
+      <button class="btn-save-key" onclick="saveKey()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Canvas setup ──
+  const canvas = document.getElementById('drawCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('canvasWrap');
+
+  let painting = false;
+  let brushSize = 3;
+  let brushColor = '#e8e4dc';
+  let apiKey = localStorage.getItem('replicate_key') || '';
+
+  if (apiKey) {
+    document.getElementById('apiKeyInput').value = apiKey;
+    document.getElementById('statusDot').classList.add('ready');
+  }
+
+  function resizeCanvas() {
+    const rect = wrap.getBoundingClientRect();
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    ctx.fillStyle = '#0e0e16';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // restore
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    };
+  }
+
+  canvas.addEventListener('mousedown', e => { painting = true; draw(e); });
+  canvas.addEventListener('mousemove', e => { if (painting) draw(e); });
+  canvas.addEventListener('mouseup', () => painting = false);
+  canvas.addEventListener('mouseleave', () => painting = false);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); painting = true; draw(e); });
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); if (painting) draw(e); });
+  canvas.addEventListener('touchend', () => painting = false);
+
+  function draw(e) {
+    const pos = getPos(e);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = brushColor;
+    ctx.lineWidth = brushSize;
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  }
+
+  function clearCanvas() {
+    ctx.fillStyle = '#0e0e16';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    document.getElementById('resultImg').style.display = 'none';
+    document.getElementById('resultPlaceholder').style.display = 'block';
+    document.getElementById('downloadBtn').classList.remove('visible');
+    document.getElementById('statusDot').className = 'status-dot' + (apiKey ? ' ready' : '');
+  }
+
+  function setBrush(size, btn) {
+    brushSize = size;
+    document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function setColor(color, swatch) {
+    brushColor = color;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+    swatch.classList.add('active');
+  }
+
+  function saveKey() {
+    const val = document.getElementById('apiKeyInput').value.trim();
+    if (val) {
+      apiKey = val;
+      localStorage.setItem('replicate_key', val);
+      document.getElementById('statusDot').classList.add('ready');
+    }
+  }
+
+  // ── Generate ──
+  async function generate() {
+    if (!apiKey) {
+      alert('Сначала введи Replicate API ключ');
+      return;
+    }
+
+    const prompt = document.getElementById('promptInput').value || 'digital art, vibrant colors';
+    const btn = document.getElementById('generateBtn');
+    const loading = document.getElementById('loadingOverlay');
+    const placeholder = document.getElementById('resultPlaceholder');
+    const resultImg = document.getElementById('resultImg');
+
+    // Get canvas as base64
+    const imageData = canvas.toDataURL('image/png');
+
+    btn.disabled = true;
+    loading.classList.add('active');
+    placeholder.style.display = 'none';
+    resultImg.style.display = 'none';
+    document.getElementById('downloadBtn').classList.remove('visible');
+
+    try {
+      // Start prediction
+      const startRes = await fetch('https://api.replicate.com/v1/predictions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          version: "ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4",
+          input: {
+            image: imageData,
+            prompt: prompt + ", masterpiece, best quality",
+            negative_prompt: "ugly, blurry, low quality, deformed",
+            num_inference_steps: 20,
+            guidance_scale: 7.5,
+            strength: 0.75,
+          }
+        })
+      });
+
+      if (!startRes.ok) {
+        const err = await startRes.json();
+        throw new Error(err.detail || 'API error');
+      }
+
+      const prediction = await startRes.json();
+
+      // Poll for result
+      let result = null;
+      let attempts = 0;
+      while (attempts < 60) {
+        await new Promise(r => setTimeout(r, 1500));
+        const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+          headers: { 'Authorization': `Token ${apiKey}` }
+        });
+        const pollData = await pollRes.json();
+
+        if (pollData.status === 'succeeded') {
+          result = pollData.output?.[0] || pollData.output;
+          break;
+        } else if (pollData.status === 'failed') {
+          throw new Error('Генерация не удалась');
+        }
+        attempts++;
+      }
+
+      if (!result) throw new Error('Timeout');
+
+      resultImg.src = result;
+      resultImg.style.display = 'block';
+      placeholder.style.display = 'none';
+
+      // Download button
+      const dlBtn = document.getElementById('downloadBtn');
+      dlBtn.href = result;
+      dlBtn.classList.add('visible');
+
+    } catch (err) {
+      console.error(err);
+      placeholder.style.display = 'block';
+      placeholder.innerHTML = `<div class="icon">✕</div><p style="color:#e87b7b">${err.message}</p>`;
+    } finally {
+      loading.classList.remove('active');
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
