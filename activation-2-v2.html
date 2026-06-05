@@ -891,9 +891,29 @@ if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
 
 // ── Build prompt from answers ──
 function buildPrompt() {
-  const q1 = state.answers.q1 || 'empowered woman';
-  const q2 = state.answers.q2 || 'vibrant colorful atmosphere';
-  return `graphic novel portrait of a ${q1}, ${q2}, bold comic art lines, vibrant colors, strong confident expression, detailed illustration, masterpiece, best quality`;
+  const styleMap = {
+    'creative visionary woman, dreamy cosmic atmosphere': {
+      style: 'soft watercolor illustration portrait, loose brushstrokes, blue and gold tones, dreamy atmospheric background, delicate washes of color, fine art watercolor',
+      mood: 'cosmic blue sky, golden light, ethereal clouds'
+    },
+    'strong structured woman, geometric bold atmosphere': {
+      style: 'colored pencil illustration portrait, warm earthy tones, amber and ochre colors, textured paper feel, detailed cross-hatching',
+      mood: 'warm golden landscape, structured geometric background'
+    },
+    'fierce dynamic woman, electric energetic atmosphere': {
+      style: 'bold risograph print portrait, vibrant red and green duotone, high contrast, grainy texture, retro print aesthetic',
+      mood: 'dynamic energetic background, tropical plants, bold graphic shapes'
+    },
+    'warm empathetic woman, organic flowing atmosphere': {
+      style: 'risograph illustration portrait, soft pink and green palette, botanical elements, cozy interior feel, warm light, textured grain',
+      mood: 'lush plants, flowers, soft domestic scene'
+    }
+  };
+
+  const q1key = state.answers.q1 || 'creative visionary woman, dreamy cosmic atmosphere';
+  const matched = styleMap[q1key] || styleMap['creative visionary woman, dreamy cosmic atmosphere'];
+
+  return `${matched.style}. Portrait of a person with expressive face. Background: ${matched.mood}. Illustrated style, not photographic. High quality illustration.`;
 }
 
 // ── Navigation ──
@@ -972,38 +992,58 @@ async function startGeneration() {
 
   try {
     const prompt = buildPrompt();
-    const resp = await fetch('https://api.replicate.com/v1/predictions', {
+
+    // стискаємо фото до max 1024px і конвертуємо в jpeg
+    const compressedPhoto = await compressImage(state.photoDataUrl, 1024);
+
+    // Nano Banana 2 (Gemini 3.1 Flash Image) — відмінно тримає ілюстративні стилі
+    const resp = await fetch('https://api.replicate.com/v1/models/google/nano-banana-2/predictions', {
       method: 'POST',
       headers: {
-        'Authorization': `Token ${state.apiKey}`,
+        'Authorization': `Bearer ${state.apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        version: "ac732df83cea7fff18b8472768c88ad041fa750ff7682a21affe81863cbe77e4",
         input: {
-          image: state.photoDataUrl,
           prompt: prompt,
-          negative_prompt: "ugly, blurry, deformed, low quality, bad anatomy, watermark",
-          num_inference_steps: 25,
-          guidance_scale: 7.5,
-          strength: 0.65
+          image: compressedPhoto,
+          aspect_ratio: '1:1',
+          output_format: 'jpg',
+          output_quality: 90
         }
       })
     });
 
     const pred = await resp.json();
+    console.log('Prediction started:', pred);
+
+    if (!pred.id) {
+      console.error('No prediction ID:', pred);
+      showResult(null);
+      return;
+    }
+
+    // поллінг
     let result = null;
     for (let i = 0; i < 60; i++) {
-      await sleep(1500);
+      await sleep(2000);
       const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
-        headers: { 'Authorization': `Token ${state.apiKey}` }
+        headers: { 'Authorization': `Bearer ${state.apiKey}` }
       });
       const data = await poll.json();
-      if (data.status === 'succeeded') { result = data.output?.[0] || data.output; break; }
-      if (data.status === 'failed') break;
+      console.log('Poll status:', data.status);
+      if (data.status === 'succeeded') {
+        result = Array.isArray(data.output) ? data.output[0] : data.output;
+        break;
+      }
+      if (data.status === 'failed') {
+        console.error('Failed:', data.error);
+        break;
+      }
     }
     showResult(result);
   } catch(e) {
+    console.error('Error:', e);
     showResult(null);
   }
 }
@@ -1061,6 +1101,26 @@ function startOver() {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// стискаємо фото перед відправкою
+function compressImage(dataUrl, maxSize) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
 </script>
 </body>
 </html>
