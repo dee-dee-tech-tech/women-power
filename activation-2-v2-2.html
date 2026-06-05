@@ -891,9 +891,29 @@ if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
 
 // ── Build prompt from answers ──
 function buildPrompt() {
-  const q1 = state.answers.q1 || 'empowered woman';
-  const q2 = state.answers.q2 || 'vibrant colorful atmosphere';
-  return `graphic novel portrait of a ${q1}, ${q2}, bold comic art lines, vibrant colors, strong confident expression, detailed illustration, masterpiece, best quality`;
+  const styleMap = {
+    'creative visionary woman, dreamy cosmic atmosphere': {
+      style: 'soft watercolor illustration portrait, loose brushstrokes, blue and gold tones, dreamy atmospheric background, delicate washes of color, fine art watercolor',
+      mood: 'cosmic blue sky, golden light, ethereal clouds'
+    },
+    'strong structured woman, geometric bold atmosphere': {
+      style: 'colored pencil illustration portrait, warm earthy tones, amber and ochre colors, textured paper feel, detailed cross-hatching',
+      mood: 'warm golden landscape, structured geometric background'
+    },
+    'fierce dynamic woman, electric energetic atmosphere': {
+      style: 'bold risograph print portrait, vibrant red and green duotone, high contrast, grainy texture, retro print aesthetic',
+      mood: 'dynamic energetic background, tropical plants, bold graphic shapes'
+    },
+    'warm empathetic woman, organic flowing atmosphere': {
+      style: 'risograph illustration portrait, soft pink and green palette, botanical elements, cozy interior feel, warm light, textured grain',
+      mood: 'lush plants, flowers, soft domestic scene'
+    }
+  };
+
+  const q1key = state.answers.q1 || 'creative visionary woman, dreamy cosmic atmosphere';
+  const matched = styleMap[q1key] || styleMap['creative visionary woman, dreamy cosmic atmosphere'];
+
+  return `${matched.style}. Portrait of a person with expressive face. Background: ${matched.mood}. Illustrated style, not photographic. High quality illustration.`;
 }
 
 // ── Navigation ──
@@ -973,44 +993,52 @@ async function startGeneration() {
   try {
     const prompt = buildPrompt();
 
-    // Flux Kontext Pro — зберігає обличчя і стилізує
-    const resp = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-pro/predictions', {
+    // стискаємо фото до max 1024px і конвертуємо в jpeg
+    const compressedPhoto = await compressImage(state.photoDataUrl, 1024);
+
+    // Flux Kontext Max — найкраща модель для збереження обличчя + стилізація
+    const resp = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-kontext-max/predictions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${state.apiKey}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'wait'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         input: {
-          prompt: `Transform this person's portrait into a ${prompt}. Keep the person's face, identity and likeness exactly the same. Only change the artistic style and background.`,
-          input_image: state.photoDataUrl,
+          prompt: `Transform this photo into ${prompt}. Keep the person's face, hair color, and facial features completely identical. Only change the art style and background.`,
+          input_image: compressedPhoto,
           aspect_ratio: '1:1',
-          output_format: 'webp',
+          output_format: 'jpg',
+          output_quality: 90,
           safety_tolerance: 2
         }
       })
     });
 
     const pred = await resp.json();
+    console.log('Prediction started:', pred);
 
-    // якщо Prefer: wait — результат вже є
-    if (pred.output) {
-      showResult(pred.output);
+    if (!pred.id) {
+      console.error('No prediction ID:', pred);
+      showResult(null);
       return;
     }
 
-    // інакше поллінг
+    // поллінг
     let result = null;
     for (let i = 0; i < 60; i++) {
-      await sleep(1500);
+      await sleep(2000);
       const poll = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, {
         headers: { 'Authorization': `Bearer ${state.apiKey}` }
       });
       const data = await poll.json();
-      if (data.status === 'succeeded') { result = data.output; break; }
+      console.log('Poll status:', data.status);
+      if (data.status === 'succeeded') {
+        result = Array.isArray(data.output) ? data.output[0] : data.output;
+        break;
+      }
       if (data.status === 'failed') {
-        console.error('Generation failed:', data.error);
+        console.error('Failed:', data.error);
         break;
       }
     }
@@ -1074,6 +1102,26 @@ function startOver() {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// стискаємо фото перед відправкою
+function compressImage(dataUrl, maxSize) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      if (w > maxSize || h > maxSize) {
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
 </script>
 </body>
 </html>
