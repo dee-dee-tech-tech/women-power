@@ -996,7 +996,7 @@ async function startGeneration() {
     // стискаємо фото до max 1024px і конвертуємо в jpeg
     const compressedPhoto = await compressImage(state.photoDataUrl, 1024);
 
-    // Nano Banana 2 (Gemini 3.1 Flash Image) — відмінно тримає ілюстративні стилі
+    // Nano Banana 2 — передаємо фото як основу для редагування зі збереженням обличчя
     const resp = await fetch('https://api.replicate.com/v1/models/google/nano-banana-2/predictions', {
       method: 'POST',
       headers: {
@@ -1005,9 +1005,9 @@ async function startGeneration() {
       },
       body: JSON.stringify({
         input: {
-          prompt: prompt,
-          image: compressedPhoto,
-          aspect_ratio: '1:1',
+          prompt: `Take this exact photo and transform it into ${prompt}. Keep the person's face, hair, and features identical — only change the artistic style and background. The person must look exactly like themselves.`,
+          images: [compressedPhoto],
+          aspect_ratio: 'match_input_image',
           output_format: 'jpg',
           output_quality: 90
         }
