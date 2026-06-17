@@ -247,7 +247,8 @@ const ARCH = {
   V:{name:'ВІЗІОНЕРКА'}, K:{name:'АКТИВАТОРКА'}, A:{name:'АРХІТЕКТОРКА'},
   D:{name:'ДОСЛІДНИЦЯ'}, P:{name:'ПРОВІДНИЦЯ'}, R:{name:'РЕФОРМАТОРКА'}
 };
-const TIEBREAK = ['V','K','A','D','P','R'];           // stable priority on ties
+const TIEBREAK = ['V','K','A','D','P','R'];           // pool for random tiebreak
+const OFFSET = {V:3.31, K:2.44, A:3.00, D:3.78, P:2.81, R:2.66}; // expected pts over 6 Q — subtract to balance
 const VAR_COLORS = ['#049add','#fd0077','#ffcd5d','#04ca53']; // 4 variations
 // cards are referenced from the /cards/ folder (4 variations per archetype)
 const SLUG = {V:'vizionerka',K:'aktyvatorka',A:'arhitektorka',D:'doslidnytsia',P:'providnytsia',R:'reformatorka'};
@@ -366,20 +367,34 @@ function finish(){
 }
 
 function reveal(){
-  let win=TIEBREAK[0];
-  TIEBREAK.forEach(k=>{ if(scores[k]>scores[win]) win=k; });
+  // winner = archetype that most exceeds its expected score; ties broken at random
+  const order=TIEBREAK.slice();
+  for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+  let win=order[0];
+  order.forEach(k=>{ if(scores[k]-OFFSET[k] > scores[win]-OFFSET[win]) win=k; });
   const v = rotation[win] % 4;          // 4 variations per archetype, round-robin
   rotation[win]++;
-  const file = 'cards/'+SLUG[win]+'-'+(v+1)+'.jpg';   // relative -> same origin on Vercel
   const card=$('#card');
-  card.classList.add('has-img');
-  card.innerHTML='';
-  const img=document.createElement('img'); img.alt=''; img.src=file;
-  card.appendChild(img);
-  // QR -> absolute URL so phones fetch the exact card shown
-  const url='https://women-power-kappa.vercel.app/'+file;
-  const qr=$('#qr'); qr.innerHTML='';
-  if(window.QRCode){ new QRCode(qr,{text:url,width:104,height:104,colorDark:'#3c1d0f',colorLight:'#ffffff'}); }
+  const qr=$('#qr');
+  function setQR(file){
+    const url='https://women-power-kappa.vercel.app/'+file;
+    qr.innerHTML='';
+    if(window.QRCode){ new QRCode(qr,{text:url,width:104,height:104,colorDark:'#3c1d0f',colorLight:'#ffffff'}); }
+  }
+  function placeholder(){            // last resort: clean blue card with the name
+    card.className='card';
+    card.style.background='#049add'; card.style.color='#fff';
+    card.innerHTML='<div class="label"><div class="name">'+ARCH[win].name+'</div></div>';
+  }
+  function place(n){                 // try variation n; on 404 fall back
+    const file='cards/'+SLUG[win]+'-'+n+'.jpg';
+    const img=document.createElement('img'); img.alt='';
+    img.onerror=function(){ if(n!==1) place(1); else placeholder(); };
+    img.src=file;
+    card.className='card has-img'; card.style.background=''; card.innerHTML=''; card.appendChild(img);
+    setQR(file);
+  }
+  place(v+1);
   show('result');
 }
 
